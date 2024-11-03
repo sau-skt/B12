@@ -369,29 +369,6 @@ app.post('/getUserList', (req, res) => {
     });
 });
 
-app.post('/getProfile', (req, res) => {
-    const { phone_number } = req.body; // Extract phone_number from request body
-
-    if (!phone_number) {
-        return res.status(400).send('Phone number is required');
-    }
-
-    const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
-
-    db.query(query, [phone_number], (err, result) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error occurred during the query.');
-        }
-
-        if (result.length > 0) {
-            res.json(result[0]); // Send the first result if user is found
-        } else {
-            res.status(404).send('User not found'); // Handle case where no user is found
-        }
-    });
-});
-
 
 
 app.post('/login-send-otp', (req, res) => {
