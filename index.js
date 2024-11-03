@@ -39,30 +39,113 @@ function handleDisconnect() {
 
 handleDisconnect();
 
+app.put('/updateProfile', (req, res) => {
+    const {
+        phone_number,
+        first_name,
+        last_name,
+        secondary_number,
+        primary_email,
+        secondary_email,
+        company,
+        designation,
+        company_start_date,
+        company_end_date,
+        profile_description,
+        mac_id,
+        linkedin_profile_link
+    } = req.body;
+
+    if (!phone_number) {
+        return res.status(400).json({ error: 'Phone number is required to update profile.' });
+    }
+
+    // Create an updateFields object with only the provided fields
+    const updateFields = {};
+    if (first_name) updateFields.first_name = first_name;
+    if (last_name) updateFields.last_name = last_name;
+    if (secondary_number) updateFields.secondary_number = secondary_number;
+    if (primary_email) updateFields.primary_email = primary_email;
+    if (secondary_email) updateFields.secondary_email = secondary_email;
+    if (company) updateFields.company = company;
+    if (designation) updateFields.designation = designation;
+    if (company_start_date) updateFields.company_start_date = company_start_date;
+    if (company_end_date) updateFields.company_end_date = company_end_date;
+    if (profile_description) updateFields.profile_description = profile_description;
+    if (mac_id) updateFields.mac_id = mac_id;
+    if (linkedin_profile_link) updateFields.linkedin_profile_link = linkedin_profile_link;
+
+    // If no fields to update are provided
+    if (Object.keys(updateFields).length === 0) {
+        return res.status(400).json({ error: 'No fields provided for update.' });
+    }
+
+    // Construct the dynamic query
+    const updateKeys = Object.keys(updateFields).map(key => `${key} = ?`).join(', ');
+    const updateValues = Object.values(updateFields);
+
+    // Final SQL query and values
+    const query = `UPDATE user_profile SET ${updateKeys} WHERE phone_number = ?`;
+    const values = [...updateValues, phone_number];
+
+    db.query(query, values, (err, result) => {
+        if (err) {
+            console.error('Error updating profile:', err);
+            return res.status(500).json({ error: 'Database query error while updating profile.' });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        res.json({ message: 'Profile updated successfully.' });
+    });
+});
+
+
+
 
 // Route to select all countries
 app.post('/getProfile', (req, res) => {
-    const { phone_number } = req.body; // Extract phone_number from request body
+    const token = req.headers['authorization']; // Extract token from headers
 
-    if (!phone_number) {
-        return res.status(400).send('Phone number is required');
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
     }
 
-    const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
     
-    db.query(query, [phone_number], (err, result) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error occurred during the query.');
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
         }
 
-        if (result.length > 0) {
-            res.json(result); // Send the result if user is found
-        } else {
-            res.status(404).send('User not found'); // Handle case where no user is found
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
         }
+
+        const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+
+        // Proceed to fetch user profile using the retrieved phone_number
+        const profileQuery = 'SELECT * FROM user_profile WHERE phone_number = ?';
+
+        db.query(profileQuery, [phone_number], (profileErr, profileResult) => {
+            if (profileErr) {
+                console.error('Error fetching profile:', profileErr);
+                return res.status(500).json({ error: 'Database query error while fetching profile' });
+            }
+
+            if (profileResult.length > 0) {
+                res.json(profileResult[0]); // Send the user profile if found
+            } else {
+                res.status(404).json({ error: 'User not found' }); // Handle case where no user is found
+            }
+        });
     });
 });
+
 
 
 function isRegistered(phone_number) {
@@ -308,6 +391,8 @@ app.post('/getProfile', (req, res) => {
         }
     });
 });
+
+
 
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
