@@ -309,29 +309,6 @@ app.post('/getProfile', (req, res) => {
     });
 });
 
-app.post('/getUserList', (req, res) => {
-    const macIds = req.body.map((item) => item.mac_id);
-
-    if (!macIds || macIds.length === 0) {
-        return res.status(400).json({ error: 'mac_id list cannot be empty' });
-    }
-
-    // Construct the SQL query to fetch user profiles based on mac_ids
-    const query = `SELECT * FROM user_profile WHERE mac_id IN (?)`;
-
-    db.query(query, [macIds], (err, results) => {
-        if (err) {
-            console.error('Error executing query:', err);
-            return res.status(500).json({ error: 'Database query error' });
-        }
-
-        // Wrap each result in an object with a 'profile' key
-        const response = results.map((profile) => ({ profile }));
-
-        res.json(response);
-    });
-});
-
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
   
