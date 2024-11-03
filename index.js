@@ -64,7 +64,6 @@ app.post('/getProfile', (req, res) => {
     });
 });
 
-<<<<<<< HEAD
 
 function isRegistered(phone_number) {
     return new Promise((resolve, reject) => {
@@ -83,25 +82,6 @@ function isRegistered(phone_number) {
     });
 }
 
-=======
-function isRegistered(phone_number) {
-    return new Promise((resolve, reject) => {
-        const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
-        
-        db.query(query, [phone_number], (err, result) => {
-            if (err) {
-                return reject(err);
-            }
-            if (result.length > 0) {
-                resolve(true);  // User exists
-            } else {
-                resolve(false); // User doesn't exist
-            }
-        });
-    });
-}
-
->>>>>>> bcfdb076ee81ce3255f6c4777c7c17057f55dcdd
 app.get('/isUserRegistered', (req, res) => {
     const { phone_number } = req.query; // Use req.query for GET request
 
