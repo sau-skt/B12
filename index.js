@@ -395,29 +395,79 @@ app.post('/login-verify-otp', async (req, res) => {
 });
 
 app.post('/getUserList', (req, res) => {
-    const macIds = req.body.map((item) => item.mac_id);
+    const token = req.headers['authorization']; // Extract token from headers
 
-    if (!macIds || macIds.length === 0) {
-        return res.status(400).json({ error: 'mac_id list cannot be empty' });
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
     }
 
-    // Construct the SQL query to fetch user profiles based on mac_ids
-    const query = `SELECT * FROM user_profile WHERE mac_id IN (?)`;
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
 
-    db.query(query, [macIds], (err, results) => {
-        if (err) {
-            console.error('Error executing query:', err);
-            return res.status(500).json({ error: 'Database query error' });
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
         }
 
-        // Wrap each result in an object with a 'profile' key
-        const response = results.map((profile) => ({ profile }));
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
 
-        res.json(response);
+        const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+
+        const macIds = req.body.map((item) => item.mac_id);
+
+        if (!macIds || macIds.length === 0) {
+            return res.status(400).json({ error: 'mac_id list cannot be empty' });
+        }
+
+        // Modified SQL query to include from_phone_number condition in the JOIN
+        const query = `
+            SELECT 
+                user_profile.*, 
+                user_selection.status 
+            FROM 
+                user_profile 
+            LEFT JOIN 
+                user_selection 
+            ON 
+                user_profile.phone_number = user_selection.to_phone_number 
+                AND user_selection.from_phone_number = ? 
+            WHERE 
+                user_profile.mac_id IN (?)
+        `;
+
+        db.query(query, [phone_number, macIds], (err, results) => {
+            if (err) {
+                console.error('Error executing query:', err);
+                return res.status(500).json({ error: 'Database query error' });
+            }
+
+            // Structure response as per the specified format
+            const response = results.map((profile) => ({
+                profile: {
+                    phone_number: profile.phone_number,
+                    first_name: profile.first_name,
+                    last_name: profile.last_name,
+                    secondary_number: profile.secondary_number,
+                    primary_email: profile.primary_email,
+                    secondary_email: profile.secondary_email,
+                    company: profile.company,
+                    designation: profile.designation,
+                    company_start_date: profile.company_start_date,
+                    company_end_date: profile.company_end_date,
+                    profile_description: profile.profile_description,
+                    mac_id: profile.mac_id,
+                    linkedin_profile_link: profile.linkedin_profile_link
+                },
+                status: profile.status || "no-comm" // Set default if status is null
+            }));
+
+            res.json(response);
+        });
     });
 });
-
-
 
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
