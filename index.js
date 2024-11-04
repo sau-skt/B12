@@ -102,6 +102,54 @@ app.put('/updateProfile', (req, res) => {
     });
 });
 
+app.post('/updateSelection', (req, res) => {
+    const token = req.headers['authorization']; // Extract token from headers
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
+    }
+
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+    
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const from_phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+        
+        // Extract to_phone_number and status from request body
+        const { to_phone_number, status } = req.body;
+
+        if (!to_phone_number || !status) {
+            return res.status(400).json({ error: 'to_phone_number and status are required' });
+        }
+
+        // Query to insert or update the selection data if both phone numbers match
+        const insertQuery = `
+            INSERT INTO user_selection (from_phone_number, to_phone_number, status)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE status = ?
+        `;
+        const insertValues = [from_phone_number, to_phone_number, status, status];
+
+        db.query(insertQuery, insertValues, (insertErr, insertResult) => {
+            if (insertErr) {
+                console.error('Error inserting or updating selection data:', insertErr);
+                return res.status(500).json({ error: 'Database query error while inserting or updating selection data' });
+            }
+
+            res.json({ message: 'Selection data inserted or updated successfully' });
+        });
+    });
+});
+
 
 
 
