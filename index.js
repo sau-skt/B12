@@ -111,7 +111,7 @@ app.post('/updateSelection', (req, res) => {
 
     // Query to find phone_number associated with the given token
     const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
-    
+
     db.query(authKeyQuery, [token], (authErr, authResult) => {
         if (authErr) {
             console.error('Error fetching auth key:', authErr);
@@ -123,7 +123,7 @@ app.post('/updateSelection', (req, res) => {
         }
 
         const from_phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
-        
+
         // Extract to_phone_number and status from request body
         const { to_phone_number, status } = req.body;
 
@@ -163,7 +163,7 @@ app.post('/getProfile', (req, res) => {
 
     // Query to find phone_number associated with the given token
     const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
-    
+
     db.query(authKeyQuery, [token], (authErr, authResult) => {
         if (authErr) {
             console.error('Error fetching auth key:', authErr);
@@ -199,7 +199,7 @@ app.post('/getProfile', (req, res) => {
 function isRegistered(phone_number) {
     return new Promise((resolve, reject) => {
         const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
-        
+
         db.query(query, [phone_number], (err, result) => {
             if (err) {
                 return reject(err);
@@ -221,7 +221,7 @@ app.get('/isUserRegistered', (req, res) => {
     }
 
     const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
-    
+
     db.query(query, [phone_number], (err, result) => {
         if (err) {
             console.error('Error executing query', err);
@@ -229,7 +229,7 @@ app.get('/isUserRegistered', (req, res) => {
         }
 
         if (result.length > 0) {
-            return res.status(400).json({ userAlreadyExists: true});
+            return res.status(400).json({ userAlreadyExists: true });
         } else {
             return res.status(200).json({ userAlreadyExists: false });
         }
@@ -272,35 +272,35 @@ app.post('/signup', async (req, res) => {
 
 // Send OTP endpoint
 app.post('/send-otp', (req, res) => {
-  const { phoneNumber } = req.body;
+    const { phoneNumber } = req.body;
 
-  if (!phoneNumber) {
-    return res.status(400).json({ error: 'Phone number is required' });
-  }
-
-  const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
-
-  // Insert phone number and OTP into the database, update OTP if phone number exists
-  const otpquery = 'INSERT INTO authentication (phone_number, otp) VALUES (?, ?) ON DUPLICATE KEY UPDATE otp = ?';
-  const otpvalues = [phoneNumber, otp, otp]; // Providing OTP for both insert and update
-
-  db.query(otpquery, otpvalues, (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database query error' });
+    if (!phoneNumber) {
+        return res.status(400).json({ error: 'Phone number is required' });
     }
 
-    // In production, you should not send the OTP back in the response
-    res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+    const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
 
-    // In development, you can include OTP in the response for testing purposes
-    // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
-  });
+    // Insert phone number and OTP into the database, update OTP if phone number exists
+    const otpquery = 'INSERT INTO authentication (phone_number, otp) VALUES (?, ?) ON DUPLICATE KEY UPDATE otp = ?';
+    const otpvalues = [phoneNumber, otp, otp]; // Providing OTP for both insert and update
+
+    db.query(otpquery, otpvalues, (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database query error' });
+        }
+
+        // In production, you should not send the OTP back in the response
+        res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+
+        // In development, you can include OTP in the response for testing purposes
+        // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+    });
 });
 
-  
-  // Verify OTP endpoint
-  const authenticateUser = (phone_number, res) => {
+
+// Verify OTP endpoint
+const authenticateUser = (phone_number, res) => {
     // Query to check phone_number only
     const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
 
@@ -415,18 +415,17 @@ app.post('/getUserList', (req, res) => {
         }
 
         const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
-
         const macIds = req.body.map((item) => item.mac_id);
 
         if (!macIds || macIds.length === 0) {
             return res.status(400).json({ error: 'mac_id list cannot be empty' });
         }
 
-        // Modified SQL query to include from_phone_number condition in the JOIN
-        const query = `
+        // Query to fetch invite_sent status
+        const queryInviteSent = `
             SELECT 
                 user_profile.*, 
-                user_selection.status 
+                user_selection.status AS invite_sent 
             FROM 
                 user_profile 
             LEFT JOIN 
@@ -438,83 +437,113 @@ app.post('/getUserList', (req, res) => {
                 user_profile.mac_id IN (?)
         `;
 
-        db.query(query, [phone_number, macIds], (err, results) => {
-            if (err) {
-                console.error('Error executing query:', err);
-                return res.status(500).json({ error: 'Database query error' });
+        // Query to fetch invite_received status
+        const queryInviteReceived = `
+            SELECT 
+                user_profile.phone_number, 
+                user_selection.status AS invite_received 
+            FROM 
+                user_profile 
+            LEFT JOIN 
+                user_selection 
+            ON 
+                user_profile.phone_number = user_selection.from_phone_number 
+                AND user_selection.to_phone_number = ? 
+            WHERE 
+                user_profile.mac_id IN (?)
+        `;
+
+        // Execute both queries
+        db.query(queryInviteSent, [phone_number, macIds], (errSent, sentResults) => {
+            if (errSent) {
+                console.error('Error executing query for invite_sent:', errSent);
+                return res.status(500).json({ error: 'Database query error for invite_sent' });
             }
 
-            // Structure response as per the specified format
-            const response = results.map((profile) => ({
-                profile: {
-                    phone_number: profile.phone_number,
-                    first_name: profile.first_name,
-                    last_name: profile.last_name,
-                    secondary_number: profile.secondary_number,
-                    primary_email: profile.primary_email,
-                    secondary_email: profile.secondary_email,
-                    company: profile.company,
-                    designation: profile.designation,
-                    company_start_date: profile.company_start_date,
-                    company_end_date: profile.company_end_date,
-                    profile_description: profile.profile_description,
-                    mac_id: profile.mac_id,
-                    linkedin_profile_link: profile.linkedin_profile_link
-                },
-                status: profile.status || "no-comm" // Set default if status is null
-            }));
+            db.query(queryInviteReceived, [phone_number, macIds], (errReceived, receivedResults) => {
+                if (errReceived) {
+                    console.error('Error executing query for invite_received:', errReceived);
+                    return res.status(500).json({ error: 'Database query error for invite_received' });
+                }
 
-            res.json(response);
+                // Combine results based on phone_number
+                const receivedMap = Object.fromEntries(
+                    receivedResults.map((item) => [item.phone_number, item.invite_received || "no-comm"])
+                );
+
+                const response = sentResults.map((profile) => ({
+                    profile: {
+                        phone_number: profile.phone_number,
+                        first_name: profile.first_name,
+                        last_name: profile.last_name,
+                        secondary_number: profile.secondary_number,
+                        primary_email: profile.primary_email,
+                        secondary_email: profile.secondary_email,
+                        company: profile.company,
+                        designation: profile.designation,
+                        company_start_date: profile.company_start_date,
+                        company_end_date: profile.company_end_date,
+                        profile_description: profile.profile_description,
+                        mac_id: profile.mac_id,
+                        linkedin_profile_link: profile.linkedin_profile_link
+                    },
+                    invite_sent: profile.invite_sent || "no-comm",
+                    invite_received: receivedMap[profile.phone_number] || "no-comm" // Set default if invite_received is null
+                }));
+
+                res.json(response);
+            });
         });
     });
 });
 
+
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
-  
+
     if (!phoneNumber) {
-      return res.status(400).json({ error: 'Phone number is required' });
+        return res.status(400).json({ error: 'Phone number is required' });
     }
-  
+
     const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
-  
+
     // Check if the phone number exists in the user_profile table
     const checkUserQuery = 'SELECT phone_number FROM user_profile WHERE phone_number = ?';
-    
+
     db.query(checkUserQuery, [phoneNumber], (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Database query error' });
-      }
-  
-      if (result.length === 0) {
-        // If the phone number does not exist in the user_profile table, send an error response
-        return res.status(404).json({ error: 'Phone number not found' });
-      }
-  
-      // If phone number exists, proceed to insert/update OTP in authentication table
-      const otpQuery = `
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database query error' });
+        }
+
+        if (result.length === 0) {
+            // If the phone number does not exist in the user_profile table, send an error response
+            return res.status(404).json({ error: 'Phone number not found' });
+        }
+
+        // If phone number exists, proceed to insert/update OTP in authentication table
+        const otpQuery = `
         INSERT INTO authentication (phone_number, otp)
         VALUES (?, ?)
         ON DUPLICATE KEY UPDATE otp = ?
       `;
-      const otpValues = [phoneNumber, otp, otp];
-  
-      db.query(otpQuery, otpValues, (err, result) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ error: 'Database query error' });
-        }
-  
-        // In production, avoid sending the OTP in the response
-        res.json({ message: `OTP sent to ${phoneNumber}`, otp });
-  
-        // In development, you might include the OTP for testing purposes
-        // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
-      });
+        const otpValues = [phoneNumber, otp, otp];
+
+        db.query(otpQuery, otpValues, (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Database query error' });
+            }
+
+            // In production, avoid sending the OTP in the response
+            res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+
+            // In development, you might include the OTP for testing purposes
+            // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+        });
     });
-  });
-  
+});
+
 
 app.listen(3001, () => {
     console.log('Server Running');
