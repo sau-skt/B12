@@ -150,7 +150,50 @@ app.post('/updateSelection', (req, res) => {
     });
 });
 
+app.post('/sendMessage', (req, res) => {
+    const token = req.headers['authorization']; // Extract token from headers
 
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
+    }
+
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const senderPhoneNumber = authResult[0].phone_number; // Retrieve sender phone number from query result
+        const { message, timestamp, phone } = req.body; // Extract message, timestamp, and receiver phone number
+
+        // Check if required fields are provided
+        if (!message || !timestamp || !phone) {
+            return res.status(400).json({ error: 'Message, timestamp, and receiver phone number are required' });
+        }
+
+        // Query to insert the message into user_chat table
+        const insertMessageQuery = `
+            INSERT INTO user_chat (sender_phone_number, receiver_phone_number, message, created_at)
+            VALUES (?, ?, ?, ?)
+        `;
+
+        db.query(insertMessageQuery, [senderPhoneNumber, phone, message, timestamp], (insertErr, insertResult) => {
+            if (insertErr) {
+                console.error('Error inserting message:', insertErr);
+                return res.status(500).json({ error: 'Database query error while inserting message' });
+            }
+
+            res.status(200).json({ success: true, message: 'Message sent successfully' });
+        });
+    });
+});
 
 
 // Route to select all countries
