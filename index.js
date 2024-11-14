@@ -151,6 +151,51 @@ app.post('/updateSelection', (req, res) => {
 });
 
 app.post('/sendMessage', (req, res) => {
+    const token = req.headers['authorization'];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
+    }
+
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const senderPhoneNumber = authResult[0].phone_number;
+        const { message, timestamp, phone } = req.body;
+
+        if (!message || !timestamp || !phone) {
+            return res.status(400).json({ error: 'Message, timestamp, and receiver phone number are required' });
+        }
+
+        // Convert the timestamp to a MySQL-compatible DATETIME format
+        const datetime = new Date(timestamp * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+        const insertMessageQuery = `
+            INSERT INTO user_chat (sender_phone_number, receiver_phone_number, message, created_at)
+            VALUES (?, ?, ?, ?)
+        `;
+
+        db.query(insertMessageQuery, [senderPhoneNumber, phone, message, datetime], (insertErr, insertResult) => {
+            if (insertErr) {
+                console.error('Error inserting message:', insertErr);
+                return res.status(500).json({ error: 'Database query error while inserting message' });
+            }
+
+            res.status(200).json({ success: true, message: 'Message sent successfully' });
+        });
+    });
+});
+
+app.get('/fetchAllMessages', express.json(), (req, res) => {
     const token = req.headers['authorization']; // Extract token from headers
 
     if (!token) {
@@ -170,31 +215,32 @@ app.post('/sendMessage', (req, res) => {
             return res.status(403).json({ error: 'Invalid or expired token' });
         }
 
-        const senderPhoneNumber = authResult[0].phone_number; // Retrieve sender phone number from query result
-        const { message, timestamp, phone } = req.body; // Extract message, timestamp, and receiver phone number
+        const phone_number = authResult[0].phone_number; // Retrieve authenticated user's phone number
+        const { receiverPhoneNumber } = req.body; // Retrieve receiver's phone number from the request body
 
-        // Check if required fields are provided
-        if (!message || !timestamp || !phone) {
-            return res.status(400).json({ error: 'Message, timestamp, and receiver phone number are required' });
+        if (!receiverPhoneNumber) {
+            return res.status(400).json({ error: 'Receiver phone number is required' });
         }
 
-        // Query to insert the message into user_chat table
-        const insertMessageQuery = `
-            INSERT INTO user_chat (sender_phone_number, receiver_phone_number, message, created_at)
-            VALUES (?, ?, ?, ?)
+        // Query to fetch all messages between the authenticated user and the receiver, sorted by created_at
+        const fetchMessagesQuery = `
+            SELECT * 
+            FROM user_chat
+            WHERE (sender_phone_number = ? AND receiver_phone_number = ?)
+               OR (sender_phone_number = ? AND receiver_phone_number = ?)
+            ORDER BY created_at ASC
         `;
 
-        db.query(insertMessageQuery, [senderPhoneNumber, phone, message, timestamp], (insertErr, insertResult) => {
-            if (insertErr) {
-                console.error('Error inserting message:', insertErr);
-                return res.status(500).json({ error: 'Database query error while inserting message' });
+        db.query(fetchMessagesQuery, [phone_number, receiverPhoneNumber, receiverPhoneNumber, phone_number], (fetchErr, messages) => {
+            if (fetchErr) {
+                console.error('Error fetching messages:', fetchErr);
+                return res.status(500).json({ error: 'Database query error while fetching messages' });
             }
 
-            res.status(200).json({ success: true, message: 'Message sent successfully' });
+            res.status(200).json({  messages });
         });
     });
 });
-
 
 // Route to select all countries
 app.post('/getProfile', (req, res) => {
