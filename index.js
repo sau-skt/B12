@@ -195,7 +195,7 @@ app.post('/sendMessage', (req, res) => {
     });
 });
 
-app.get('/fetchAllMessages', express.json(), (req, res) => {
+app.post('/fetchAllMessages', express.json(), (req, res) => {
     const token = req.headers['authorization']; // Extract token from headers
 
     if (!token) {
