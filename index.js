@@ -697,11 +697,15 @@ app.post('/getEventList', (req, res) => {
                 });
 
                 // Format to YYYY-MM-DD HH:mm:ss
-                const formattedToday = formatter.format(today).replace(',', '').replace('T', ' ');
-                const [date, time] = formattedToday.split(' ');
-                const sqlFormattedToday = `${date.split('/').reverse().join('-')} ${time}`;
+                const formattedToday = formatter.format(today).replace(',', '');
+                const [month, day, year] = formattedToday.split('/').map((part, index) => {
+                    if (index === 2) return part.split(' ')[0]; // Extract year
+                    return part;
+                });
+                const time = formattedToday.split(' ')[1];
+                const sqlFormattedToday = `${year}-${month}-${day} ${time}`;
 
-                console.log(sqlFormattedToday); // Debug: Check if it's correct
+                console.log(sqlFormattedToday); // Debug: Verify it outputs the correct format
 
                 // Get event_id, event_name, and created_at from user_event table using primary_ids
                 const userEventQuery = `
@@ -734,7 +738,6 @@ app.post('/getEventList', (req, res) => {
         });
     });
 });
-
 
 app.post('/getUserList', (req, res) => {
     const token = req.headers['authorization']; // Extract token from headers
