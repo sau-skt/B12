@@ -684,10 +684,24 @@ app.post('/getEventList', (req, res) => {
                     return res.status(404).json({ error: 'No events found for provided phone numbers' });
                 }
 
-                // Get today's date in SQL-compatible format
+                // Get today's date in local time zone
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); // Set time to midnight
-                const formattedToday = today.toISOString().slice(0, 19).replace('T', ' ');
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'Asia/Kolkata',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                });
+
+                // Format to YYYY-MM-DD HH:mm:ss
+                const formattedToday = formatter.format(today).replace(',', '').replace('T', ' ');
+                const [date, time] = formattedToday.split(' ');
+                const sqlFormattedToday = `${date.split('/').reverse().join('-')} ${time}`;
+
+                console.log(sqlFormattedToday); // Debug: Check if it's correct
 
                 // Get event_id, event_name, and created_at from user_event table using primary_ids
                 const userEventQuery = `
@@ -696,7 +710,7 @@ app.post('/getEventList', (req, res) => {
                     WHERE event_id IN (?) AND created_at > ?
                 `;
 
-                db.query(userEventQuery, [primaryIds, formattedToday], (userEventErr, userEventResults) => {
+                db.query(userEventQuery, [primaryIds, sqlFormattedToday], (userEventErr, userEventResults) => {
                     if (userEventErr) {
                         console.error('Error fetching user events:', userEventErr);
                         return res.status(500).json({ error: 'Database query error while fetching user events' });
@@ -720,6 +734,7 @@ app.post('/getEventList', (req, res) => {
         });
     });
 });
+
 
 app.post('/getUserList', (req, res) => {
     const token = req.headers['authorization']; // Extract token from headers
