@@ -249,12 +249,20 @@ app.post('/createNewEvent', (req, res) => {
         return res.status(401).json({ error: 'Authorization token is required' });
     }
 
-    const { event_name } = req.body;
+    const { event_name, timestamp } = req.body;
 
     // Validate the event_name field
     if (!event_name || typeof event_name !== 'string' || event_name.trim() === '') {
         return res.status(400).json({ error: 'A valid event name is required' });
     }
+
+    // Validate the timestamp field
+    if (!timestamp || typeof timestamp !== 'number' || timestamp <= 0) {
+        return res.status(400).json({ error: 'A valid timestamp is required' });
+    }
+
+    // Convert Unix timestamp (in seconds) to ISO 8601 datetime format for SQL
+    const formattedTimestamp = new Date(timestamp * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
     // Query to find phone_number associated with the given token
     const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
@@ -271,10 +279,10 @@ app.post('/createNewEvent', (req, res) => {
 
         const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
 
-        // Insert the event name into the user_event table
-        const insertEventQuery = 'INSERT INTO user_event (event_name) VALUES (?)';
+        // Insert the event name and timestamp into the user_event table
+        const insertEventQuery = 'INSERT INTO user_event (event_name, created_at) VALUES (?, ?)';
 
-        db.query(insertEventQuery, [event_name], (insertErr, insertResult) => {
+        db.query(insertEventQuery, [event_name, formattedTimestamp], (insertErr, insertResult) => {
             if (insertErr) {
                 console.error('Error inserting event:', insertErr);
                 return res.status(500).json({ error: 'Database query error while inserting event' });
@@ -676,27 +684,33 @@ app.post('/getEventList', (req, res) => {
                     return res.status(404).json({ error: 'No events found for provided phone numbers' });
                 }
 
-                // Get event_id and event_name from user_event table using primary_ids
+                // Get today's date in SQL-compatible format
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Set time to midnight
+                const formattedToday = today.toISOString().slice(0, 19).replace('T', ' ');
+
+                // Get event_id, event_name, and created_at from user_event table using primary_ids
                 const userEventQuery = `
-                    SELECT event_id, event_name 
+                    SELECT event_id, event_name, created_at 
                     FROM user_event 
-                    WHERE event_id IN (?)
+                    WHERE event_id IN (?) AND created_at > ?
                 `;
 
-                db.query(userEventQuery, [primaryIds], (userEventErr, userEventResults) => {
+                db.query(userEventQuery, [primaryIds, formattedToday], (userEventErr, userEventResults) => {
                     if (userEventErr) {
                         console.error('Error fetching user events:', userEventErr);
                         return res.status(500).json({ error: 'Database query error while fetching user events' });
                     }
 
                     if (userEventResults.length === 0) {
-                        return res.status(404).json({ error: 'No events found for provided primary_ids' });
+                        return res.status(404).json({ error: 'No events found for provided primary_ids or all events are outdated' });
                     }
 
-                    // Map event_id and event_name into a structured response
+                    // Map event_id, event_name, and created_at into a structured response
                     const events = userEventResults.map(row => ({
                         event_id: row.event_id,
                         event_name: row.event_name,
+                        created_at: row.created_at,
                     }));
 
                     // Send the events as response
