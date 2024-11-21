@@ -242,6 +242,144 @@ app.post('/fetchAllMessages', express.json(), (req, res) => {
     });
 });
 
+app.post('/createNewEvent', (req, res) => {
+    const token = req.headers['authorization']; // Extract token from headers
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
+    }
+
+    const { event_name } = req.body;
+
+    // Validate the event_name field
+    if (!event_name || typeof event_name !== 'string' || event_name.trim() === '') {
+        return res.status(400).json({ error: 'A valid event name is required' });
+    }
+
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+
+        // Insert the event name into the user_event table
+        const insertEventQuery = 'INSERT INTO user_event (event_name) VALUES (?)';
+
+        db.query(insertEventQuery, [event_name], (insertErr, insertResult) => {
+            if (insertErr) {
+                console.error('Error inserting event:', insertErr);
+                return res.status(500).json({ error: 'Database query error while inserting event' });
+            }
+
+            const event_id = insertResult.insertId; // Get the event_id of the newly inserted event
+
+            // Insert the data into the user_list table
+            const insertUserListQuery = `
+                INSERT INTO user_list (primary_id, secondary_id, phone_number)
+                VALUES (?, ?, ?)
+            `;
+
+            db.query(insertUserListQuery, [event_id, event_id, phone_number], (listInsertErr) => {
+                if (listInsertErr) {
+                    console.error('Error inserting into user_list:', listInsertErr);
+                    return res.status(500).json({ error: 'Database query error while inserting into user_list' });
+                }
+
+                // Respond with success
+                res.status(200).json({
+                    success: true,
+                    message: 'Event created and user_list updated successfully',
+                    event_id: event_id,
+                    phone_number: phone_number,
+                });
+            });
+        });
+    });
+});
+
+app.post('/joinEvent', (req, res) => {
+    const token = req.headers['authorization']; // Extract token from headers
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token is required' });
+    }
+
+    const { event_id } = req.body;
+
+    // Validate the event_id field
+    if (!event_id || typeof event_id !== 'string' || event_id.trim() === '') {
+        return res.status(400).json({ error: 'A valid event ID is required' });
+    }
+
+    // Query to find phone_number associated with the given token
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+
+        // Query to insert a new entry into the user_list table
+        const insertQuery = 'INSERT INTO user_list (primary_id, secondary_id, phone_number) VALUES (?, ?, ?)';
+
+        db.query(insertQuery, [event_id, event_id, phone_number], (insertErr) => {
+            if (insertErr) {
+                console.error('Error inserting into user_list:', insertErr);
+                return res.status(500).json({ error: 'Database query error while inserting into user_list' });
+            }
+
+            // Query to retrieve all phone numbers associated with the event_id
+            const fetchPhoneNumbersQuery = 'SELECT phone_number FROM user_list WHERE primary_id = ?';
+
+            db.query(fetchPhoneNumbersQuery, [event_id], (fetchErr, fetchResult) => {
+                if (fetchErr) {
+                    console.error('Error fetching phone numbers:', fetchErr);
+                    return res.status(500).json({ error: 'Database query error while fetching phone numbers' });
+                }
+
+                const phoneNumbers = fetchResult.map(row => row.phone_number);
+
+                // Query to fetch profiles for all phone numbers
+                const fetchProfilesQuery = `
+                    SELECT * FROM user_profile WHERE phone_number IN (?)
+                `;
+
+                db.query(fetchProfilesQuery, [phoneNumbers], (profileErr, profileResult) => {
+                    if (profileErr) {
+                        console.error('Error fetching profiles:', profileErr);
+                        return res.status(500).json({ error: 'Database query error while fetching profiles' });
+                    }
+
+                    // Structure the response
+                    const response = profileResult.map(profile => ({
+                        profile
+                    }));
+
+                    // Send the response
+                    return res.status(200).json(response);
+                });
+            });
+        });
+    });
+});
+
+
 // Route to select all countries
 app.post('/getProfile', (req, res) => {
     const token = req.headers['authorization']; // Extract token from headers
@@ -283,8 +421,6 @@ app.post('/getProfile', (req, res) => {
     });
 });
 
-
-
 function isRegistered(phone_number) {
     return new Promise((resolve, reject) => {
         const query = 'SELECT * FROM user_profile WHERE phone_number = ?';
@@ -324,8 +460,6 @@ app.get('/isUserRegistered', (req, res) => {
         }
     });
 });
-
-
 
 app.post('/signup', async (req, res) => {
     const { phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link } = req.body;
@@ -386,7 +520,6 @@ app.post('/send-otp', (req, res) => {
         // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
     });
 });
-
 
 // Verify OTP endpoint
 const authenticateUser = (phone_number, res) => {
@@ -480,6 +613,97 @@ app.post('/login-verify-otp', async (req, res) => {
             // OTP doesn't match
             return res.status(400).json({ error: 'Invalid OTP or phone number' });
         }
+    });
+});
+
+app.post('/getEventList', (req, res) => {
+    const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
+    const token = req.headers.authorization; // Assuming token is passed in the headers
+
+    // Validate token
+    db.query(authKeyQuery, [token], (authErr, authResult) => {
+        if (authErr) {
+            console.error('Error fetching auth key:', authErr);
+            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+        }
+
+        if (authResult.length === 0) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+
+        const phone_number = authResult[0].phone_number; // Phone number associated with token
+        const macIds = req.body.map((item) => item.mac_id);
+
+        if (!macIds || macIds.length === 0) {
+            return res.status(400).json({ error: 'mac_id list cannot be empty' });
+        }
+
+        // Get phone_numbers from user_profile table using mac_id
+        const userProfileQuery = `
+            SELECT DISTINCT phone_number 
+            FROM user_profile 
+            WHERE mac_id IN (?)
+        `;
+
+        db.query(userProfileQuery, [macIds], (userProfileErr, userProfileResults) => {
+            if (userProfileErr) {
+                console.error('Error fetching user profiles:', userProfileErr);
+                return res.status(500).json({ error: 'Database query error while fetching user profiles' });
+            }
+
+            const phoneNumbers = userProfileResults.map(row => row.phone_number);
+
+            if (phoneNumbers.length === 0) {
+                return res.status(404).json({ error: 'No phone numbers found for provided mac_ids' });
+            }
+
+            // Get primary_ids from event_list table using phone_numbers
+            const eventListQuery = `
+                SELECT primary_id 
+                FROM user_list 
+                WHERE phone_number IN (?)
+            `;
+
+            db.query(eventListQuery, [phoneNumbers], (eventListErr, eventListResults) => {
+                if (eventListErr) {
+                    console.error('Error fetching event list:', eventListErr);
+                    return res.status(500).json({ error: 'Database query error while fetching event list' });
+                }
+
+                const primaryIds = eventListResults.map(row => row.primary_id);
+
+                if (primaryIds.length === 0) {
+                    return res.status(404).json({ error: 'No events found for provided phone numbers' });
+                }
+
+                // Get event_id and event_name from user_event table using primary_ids
+                const userEventQuery = `
+                    SELECT event_id, event_name 
+                    FROM user_event 
+                    WHERE event_id IN (?)
+                `;
+
+                db.query(userEventQuery, [primaryIds], (userEventErr, userEventResults) => {
+                    if (userEventErr) {
+                        console.error('Error fetching user events:', userEventErr);
+                        return res.status(500).json({ error: 'Database query error while fetching user events' });
+                    }
+
+                    if (userEventResults.length === 0) {
+                        return res.status(404).json({ error: 'No events found for provided primary_ids' });
+                    }
+
+                    // Map event_id and event_name into a structured response
+                    const events = userEventResults.map(row => ({
+                        event_id: row.event_id,
+                        event_name: row.event_name,
+                    }));
+
+                    // Send the events as response
+                    res.status(200).json({ events });
+                });
+            });
+        });
     });
 });
 
@@ -585,7 +809,6 @@ app.post('/getUserList', (req, res) => {
         });
     });
 });
-
 
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
