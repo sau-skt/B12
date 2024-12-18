@@ -740,9 +740,12 @@ app.post('/getEventList', (req, res) => {
 });
 
 app.post('/getUserList', (req, res) => {
+    console.log('Request Body:', req.body); // Log request body
+
     const token = req.headers['authorization']; // Extract token from headers
 
     if (!token) {
+        console.error('Authorization token is missing');
         return res.status(401).json({ error: 'Authorization token is required' });
     }
 
@@ -756,6 +759,7 @@ app.post('/getUserList', (req, res) => {
         }
 
         if (authResult.length === 0) {
+            console.error('Invalid or expired token');
             return res.status(403).json({ error: 'Invalid or expired token' });
         }
 
@@ -763,6 +767,7 @@ app.post('/getUserList', (req, res) => {
         const macIds = req.body.map((item) => item.mac_id);
 
         if (!macIds || macIds.length === 0) {
+            console.error('mac_id list is empty');
             return res.status(400).json({ error: 'mac_id list cannot be empty' });
         }
 
@@ -836,6 +841,7 @@ app.post('/getUserList', (req, res) => {
                     invite_received: receivedMap[profile.phone_number] || "no-comm" // Set default if invite_received is null
                 }));
 
+                console.log('Response Body:', response); // Log response body
                 res.json(response);
             });
         });
