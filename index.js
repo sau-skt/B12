@@ -684,28 +684,24 @@ app.post('/getEventList', (req, res) => {
                     return res.status(404).json({ error: 'No events found for provided phone numbers' });
                 }
 
-                // Get today's date in local time zone
+                // Get today's date at 12:00 AM in the Asia/Kolkata timezone
                 const today = new Date();
+                today.setUTCHours(0, 0, 0, 0); // Convert UTC to IST (UTC +5:30)
+
                 const formatter = new Intl.DateTimeFormat('en-US', {
                     timeZone: 'Asia/Kolkata',
                     year: 'numeric',
                     month: '2-digit',
                     day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
                 });
 
-                // Format to YYYY-MM-DD HH:mm:ss
-                const formattedToday = formatter.format(today).replace(',', '');
-                const [month, day, year] = formattedToday.split('/').map((part, index) => {
-                    if (index === 2) return part.split(' ')[0]; // Extract year
-                    return part;
-                });
-                const time = formattedToday.split(' ')[1];
-                const sqlFormattedToday = `${year}-${month}-${day} ${time}`;
+                // Format to YYYY-MM-DD 00:00:00
+                const formattedToday = formatter.format(today);
+                const [month, day, year] = formattedToday.split('/');
 
-                console.log(sqlFormattedToday); // Debug: Verify it outputs the correct format
+                const sqlFormattedToday = `${year}-${month}-${day} 00:00:00`;
+
+                console.log(`Fetching events created after: ${sqlFormattedToday}`);
 
                 // Get event_id, event_name, and created_at from user_event table using primary_ids
                 const userEventQuery = `
@@ -738,6 +734,7 @@ app.post('/getEventList', (req, res) => {
         });
     });
 });
+
 
 app.post('/getUserList', (req, res) => {
     console.log('Request Body:', req.body); // Log request body
