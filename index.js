@@ -470,6 +470,7 @@ app.get('/isUserRegistered', (req, res) => {
 });
 
 app.post('/signup', async (req, res) => {
+    console.log('Request Body:', req.body);
     const { phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link } = req.body;
 
     try {
@@ -728,7 +729,7 @@ app.post('/getEventList', (req, res) => {
                     }));
 
                     // Send the events as response
-                    res.status(200).json({ events });
+                    res.status(200).json({ userEventResults });
                 });
             });
         });
@@ -737,7 +738,7 @@ app.post('/getEventList', (req, res) => {
 
 
 app.post('/getUserList', (req, res) => {
-    console.log('Request Body:', req.body); // Log request body
+     // Log request body
 
     const token = req.headers['authorization']; // Extract token from headers
 
