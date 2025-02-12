@@ -587,6 +587,45 @@ const authenticateUser = (phone_number, res) => {
     });
 };
 
+const signupAuthenticateUser = (phone_number, res) => {
+    if (!phone_number) {
+        console.error('Phone number is required');
+        return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    console.log(`Authenticating user with phone number: ${phone_number}`);
+
+    // Generate a JWT token
+    const token = jwt.sign(
+        { phone_number }, // Payload
+        JWT_SECRET       // Secret key
+    );
+
+    // Query to insert or update the auth_key table
+    const authKeyQuery = `
+        INSERT INTO auth_key (phone_number, auth_key) 
+        VALUES (?, ?) 
+        ON DUPLICATE KEY UPDATE auth_key = ?
+    `;
+    const authKeyValues = [phone_number, token, token];
+
+    // Insert or update the token in the auth_key table
+    db.query(authKeyQuery, authKeyValues, (authErr) => {
+        if (authErr) {
+            console.error('Error inserting or updating auth_key:', authErr);
+            return res.status(500).json({ error: 'Error occurred while saving auth token.' });
+        }
+
+        console.log('Auth token saved successfully for:', phone_number);
+
+        // Send the token as response
+        return res.json({
+            message: 'User authenticated successfully',
+            token
+        });
+    });
+};
+
 app.post('/verify-otp', async (req, res) => {
     console.log('Request Body:', req.body); // Log the request body
 
@@ -614,9 +653,9 @@ app.post('/verify-otp', async (req, res) => {
 
         if (result.length > 0) {
             console.log(`OTP verified successfully for phone number: ${phoneNumber}`);
-            const successResponse = { message: 'OTP verified successfully' };
-            console.log('Response:', successResponse);
-            return res.json(successResponse);
+            
+            // Call signupAuthenticateUser and pass res to send token
+            return signupAuthenticateUser(phoneNumber, res);
         } else {
             console.warn(`Invalid OTP or phone number: ${phoneNumber}`);
             const errorResponse = { error: 'Invalid OTP or phone number' };
@@ -625,6 +664,7 @@ app.post('/verify-otp', async (req, res) => {
         }
     });
 });
+
 
 app.post('/login-verify-otp', async (req, res) => {
     const { phoneNumber, otp } = req.body;
