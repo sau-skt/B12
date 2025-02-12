@@ -587,6 +587,32 @@ const authenticateUser = (phone_number, res) => {
     });
 };
 
+app.post('/verify-otp', async (req, res) => {
+    const { phoneNumber, otp } = req.body;
+
+    if (!phoneNumber || !otp) {
+        return res.status(400).json({ error: 'Phone number and OTP are required' });
+    }
+
+    // Query the database to verify the OTP
+    const otpQuery = 'SELECT * FROM authentication WHERE phone_number = ? AND otp = ?';
+    const otpValues = [phoneNumber, otp];
+
+    db.query(otpQuery, otpValues, async (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).json({ error: 'Database query error' });
+        }
+
+        if (result.length > 0) {
+            // OTP matches
+        } else {
+            // OTP doesn't match
+            return res.status(400).json({ error: 'Invalid OTP or phone number' });
+        }
+    });
+});
+
 app.post('/login-verify-otp', async (req, res) => {
     const { phoneNumber, otp } = req.body;
 
