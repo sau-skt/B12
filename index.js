@@ -588,27 +588,40 @@ const authenticateUser = (phone_number, res) => {
 };
 
 app.post('/verify-otp', async (req, res) => {
+    console.log('Request Body:', req.body); // Log the request body
+
     const { phoneNumber, otp } = req.body;
 
     if (!phoneNumber || !otp) {
-        return res.status(400).json({ error: 'Phone number and OTP are required' });
+        const errorResponse = { error: 'Phone number and OTP are required' };
+        console.error('Response:', errorResponse);
+        return res.status(400).json(errorResponse);
     }
 
     // Query the database to verify the OTP
     const otpQuery = 'SELECT * FROM authentication WHERE phone_number = ? AND otp = ?';
     const otpValues = [phoneNumber, otp];
 
+    console.log(`Verifying OTP for phone number: ${phoneNumber}, OTP: ${otp}`);
+
     db.query(otpQuery, otpValues, async (err, result) => {
         if (err) {
-            console.log(err);
-            return res.status(500).json({ error: 'Database query error' });
+            console.error('Database Query Error:', err);
+            const errorResponse = { error: 'Database query error' };
+            console.error('Response:', errorResponse);
+            return res.status(500).json(errorResponse);
         }
 
         if (result.length > 0) {
-            // OTP matches
+            console.log(`OTP verified successfully for phone number: ${phoneNumber}`);
+            const successResponse = { message: 'OTP verified successfully' };
+            console.log('Response:', successResponse);
+            return res.json(successResponse);
         } else {
-            // OTP doesn't match
-            return res.status(400).json({ error: 'Invalid OTP or phone number' });
+            console.warn(`Invalid OTP or phone number: ${phoneNumber}`);
+            const errorResponse = { error: 'Invalid OTP or phone number' };
+            console.warn('Response:', errorResponse);
+            return res.status(400).json(errorResponse);
         }
     });
 });
