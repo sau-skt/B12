@@ -470,7 +470,10 @@ app.get('/isUserRegistered', (req, res) => {
 });
 
 app.post('/signup', async (req, res) => {
-    console.log('Request Body:', req.body);
+    const getISTTimestamp = () => new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+
+    console.log(`[${getISTTimestamp()}] Request Body:`, req.body);
+
     const { phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link } = req.body;
 
     try {
@@ -479,25 +482,31 @@ app.post('/signup', async (req, res) => {
 
         if (userExists) {
             // If user already exists, send a response without making a DB entry
+            console.log(`[${getISTTimestamp()}] Response Body: User Already Exists`);
             return res.status(400).json({ message: 'User Already Exists With This Phone Number' });
         }
 
         // Proceed with user registration if the user doesn't exist
-        const query = 'INSERT INTO user_profile (phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE mac_id = ?';
+        const query = `INSERT INTO user_profile 
+            (phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            ON DUPLICATE KEY UPDATE mac_id = ?`;
+
         const values = [phone_number, first_name, last_name, secondary_number, primary_email, secondary_email, company, designation, company_start_date, company_end_date, profile_description, mac_id, linkedin_profile_link, mac_id];
 
         db.query(query, values, (err, result) => {
             if (err) {
-                console.log(err);
+                console.log(`[${getISTTimestamp()}] Error:`, err);
                 return res.status(500).send('Error occurred during the query.');
             }
 
             // Respond after successful registration
+            console.log(`[${getISTTimestamp()}] Response Body: User is Registered Successfully`);
             res.status(200).send('');
         });
 
     } catch (err) {
-        console.error('Error checking user registration', err);
+        console.error(`[${getISTTimestamp()}] Error checking user registration:`, err);
         res.status(500).send('Internal server error');
     }
 });
@@ -849,24 +858,33 @@ app.post('/getUserList', (req, res) => {
 app.post('/login-send-otp', (req, res) => {
     const { phoneNumber } = req.body;
 
+    console.log('Request Body:', req.body); // Log the request body
+
     if (!phoneNumber) {
-        return res.status(400).json({ error: 'Phone number is required' });
+        const errorResponse = { error: 'Phone number is required' };
+        console.error('Response:', errorResponse);
+        return res.status(400).json(errorResponse);
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
+    console.log(`Generated OTP for ${phoneNumber}:`, otp);
 
     // Check if the phone number exists in the user_profile table
     const checkUserQuery = 'SELECT phone_number FROM user_profile WHERE phone_number = ?';
 
     db.query(checkUserQuery, [phoneNumber], (err, result) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Database query error' });
+            console.error('Database Query Error:', err);
+            const errorResponse = { error: 'Database query error' };
+            console.error('Response:', errorResponse);
+            return res.status(500).json(errorResponse);
         }
 
         if (result.length === 0) {
-            // If the phone number does not exist in the user_profile table, send an error response
-            return res.status(404).json({ error: 'Phone number not found' });
+            const errorResponse = { error: 'Phone number not found' };
+            console.warn(`Phone number ${phoneNumber} not found in database.`);
+            console.warn('Response:', errorResponse);
+            return res.status(404).json(errorResponse);
         }
 
         // If phone number exists, proceed to insert/update OTP in authentication table
@@ -879,18 +897,19 @@ app.post('/login-send-otp', (req, res) => {
 
         db.query(otpQuery, otpValues, (err, result) => {
             if (err) {
-                console.error(err);
-                return res.status(500).json({ error: 'Database query error' });
+                console.error('Database Query Error:', err);
+                const errorResponse = { error: 'Database query error' };
+                console.error('Response:', errorResponse);
+                return res.status(500).json(errorResponse);
             }
 
-            // In production, avoid sending the OTP in the response
-            res.json({ message: `OTP sent to ${phoneNumber}`, otp });
-
-            // In development, you might include the OTP for testing purposes
-            // res.json({ message: `OTP sent to ${phoneNumber}`, otp });
+            const successResponse = { message: `OTP sent to ${phoneNumber}`, otp };
+            console.log('Response:', successResponse);
+            res.json(successResponse);
         });
     });
 });
+
 
 
 app.listen(3001, () => {
