@@ -826,7 +826,9 @@ app.post('/getEventList', (req, res) => {
 
 
 app.post('/getUserList', (req, res) => {
-    console.log('Incoming request to /getUserList:', req.body); // Log request body
+    const getISTTimestamp = () => new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+
+    console.log(`[${getISTTimestamp()}] Incoming request to /getUserList:`, req.body); // Log request body
 
     const token = req.headers['authorization']; // Extract token from headers
 
