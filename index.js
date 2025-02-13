@@ -826,38 +826,40 @@ app.post('/getEventList', (req, res) => {
 
 
 app.post('/getUserList', (req, res) => {
-     // Log request body
+    console.log('Incoming request to /getUserList:', req.body); // Log request body
 
     const token = req.headers['authorization']; // Extract token from headers
 
     if (!token) {
-        console.error('Authorization token is missing');
-        return res.status(401).json({ error: 'Authorization token is required' });
+        const errorResponse = { error: 'Authorization token is required' };
+        console.log('Authorization token is missing:', errorResponse);
+        return res.status(401).json(errorResponse);
     }
 
-    // Query to find phone_number associated with the given token
     const authKeyQuery = 'SELECT phone_number FROM auth_key WHERE auth_key = ?';
 
     db.query(authKeyQuery, [token], (authErr, authResult) => {
         if (authErr) {
-            console.error('Error fetching auth key:', authErr);
-            return res.status(500).json({ error: 'Database query error while fetching auth key' });
+            const errorResponse = { error: 'Database query error while fetching auth key' };
+            console.log('Error fetching auth key:', authErr, errorResponse);
+            return res.status(500).json(errorResponse);
         }
 
         if (authResult.length === 0) {
-            console.error('Invalid or expired token');
-            return res.status(403).json({ error: 'Invalid or expired token' });
+            const errorResponse = { error: 'Invalid or expired token' };
+            console.log('Invalid or expired token:', errorResponse);
+            return res.status(403).json(errorResponse);
         }
 
-        const phone_number = authResult[0].phone_number; // Retrieve phone_number from query result
+        const phone_number = authResult[0].phone_number;
         const macIds = req.body.map((item) => item.mac_id);
 
         if (!macIds || macIds.length === 0) {
-            console.error('mac_id list is empty');
-            return res.status(400).json({ error: 'mac_id list cannot be empty' });
+            const errorResponse = { error: 'mac_id list cannot be empty' };
+            console.log('mac_id list is empty:', errorResponse);
+            return res.status(400).json(errorResponse);
         }
 
-        // Query to fetch invite_sent status
         const queryInviteSent = `
             SELECT 
                 user_profile.*, 
@@ -873,7 +875,6 @@ app.post('/getUserList', (req, res) => {
                 user_profile.mac_id IN (?)
         `;
 
-        // Query to fetch invite_received status
         const queryInviteReceived = `
             SELECT 
                 user_profile.phone_number, 
@@ -889,22 +890,22 @@ app.post('/getUserList', (req, res) => {
                 user_profile.mac_id IN (?)
         `;
 
-        // Execute both queries
         db.query(queryInviteSent, [phone_number, macIds], (errSent, sentResults) => {
             if (errSent) {
-                console.error('Error executing query for invite_sent:', errSent);
-                return res.status(500).json({ error: 'Database query error for invite_sent' });
+                const errorResponse = { error: 'Database query error for invite_sent' };
+                console.log('Error executing query for invite_sent:', errSent, errorResponse);
+                return res.status(500).json(errorResponse);
             }
 
             db.query(queryInviteReceived, [phone_number, macIds], (errReceived, receivedResults) => {
                 if (errReceived) {
-                    console.error('Error executing query for invite_received:', errReceived);
-                    return res.status(500).json({ error: 'Database query error for invite_received' });
+                    const errorResponse = { error: 'Database query error for invite_received' };
+                    console.log('Error executing query for invite_received:', errReceived, errorResponse);
+                    return res.status(500).json(errorResponse);
                 }
 
-                // Combine results based on phone_number
                 const receivedMap = Object.fromEntries(
-                    receivedResults.map((item) => [item.phone_number, item.invite_received || "no-comm"])
+                    receivedResults.map((item) => [item.phone_number, item.invite_received || 'no-comm'])
                 );
 
                 const response = sentResults.map((profile) => ({
@@ -923,11 +924,11 @@ app.post('/getUserList', (req, res) => {
                         mac_id: profile.mac_id,
                         linkedin_profile_link: profile.linkedin_profile_link
                     },
-                    invite_sent: profile.invite_sent || "no-comm",
-                    invite_received: receivedMap[profile.phone_number] || "no-comm" // Set default if invite_received is null
+                    invite_sent: profile.invite_sent || 'no-comm',
+                    invite_received: receivedMap[profile.phone_number] || 'no-comm'
                 }));
 
-                console.log('Response Body:', response); // Log response body
+                console.log('Response sent for /getUserList:', response); // Log response body
                 res.json(response);
             });
         });
